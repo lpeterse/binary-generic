@@ -1,0 +1,22 @@
+name:            binary-generic
+version:         0.1
+license:         BSD3
+license-file:    LICENSE
+author:          Lars Petersen <info@lars-petersen.net>
+maintainer:      Lars Petersen <info@lars-petersen.net>
+description:     Instead of manually or semi-automated generating
+                 instances of Binary you just derive Data and are done!
+synopsis:        Generic serialisation of algebraic types using binary and syb.
+category:        Data, Parsing
+stability:       experimental
+build-type:      Simple
+cabal-version:   >= 1.2
+tested-with:     GHC == 6.12
+extra-source-files: README 
+
+library
+  build-depends:   base >= 3.0, binary >= 0.5, syb >= 0.2
+  hs-source-dirs:  src
+  exposed-modules: Data.Binary.Generic
+  ghc-options:     -O2 -Wall
+
