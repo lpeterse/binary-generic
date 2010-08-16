@@ -50,12 +50,14 @@ module Data.Binary.Generic (
     
      getGeneric
    , putGeneric
+   , extend
+   , extendDefault
 
    ) where
 
 import Data.Binary
-import Data.Binary.Put     (putWord16le, putWord32le)
-import Data.Binary.Get     (getWord16le, getWord32le)
+import Data.Binary.Put     (putWord16le)
+import Data.Binary.Get     (getWord16le)
 import Data.Binary.IEEE754 (putFloat32be, getFloat32be, putFloat64be, getFloat64be)
 
 import Data.Data
