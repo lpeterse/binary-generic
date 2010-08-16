@@ -88,14 +88,12 @@ getGeneric  = generalCase
               `extR` (getFloat64be :: Get Double)
               where
                 getText       = get >>= (return . decodeUtf8)
-                fi            = fromIntegral
+                fromIntegralM = return . fromIntegral
                 myDataType    = dataTypeOf ((undefined :: Get b -> b) generalCase)
                 generalCase   = let imax  = maxConstrIndex myDataType
                                     index | imax == 1    = return 0     :: Get Int
-                                          | imax <= 2^8  = getWord8    >>= return . fi
-                                          | imax <= 2^16 = getWord8    >>= \l-> getWord16le 
-                                                                       >>= \h-> return $ (fi h)*256 + (fi l)
-                                          | imax <= 2^24 = getWord32le >>= return . fi
+                                          | imax <= 2^8  = getWord8    >>= fromIntegralM
+                                          | imax <= 2^16 = getWord16le >>= fromIntegralM 
                                           | otherwise    = error "getGeneric: constructor index out of range"
                                 in  index >>= \i-> fromConstrM getGeneric (indexConstr myDataType (i+1))
 
@@ -118,14 +116,11 @@ putGeneric   = generalCase
                `extQ` (putFloat32be     :: Float      -> Put)
                `extQ` (putFloat64be     :: Double     -> Put)
                where
-                 generalCase t = let i        = constrIndex (toConstr t) - 1 
-                                     (h,l)    = quotRem i (2^8)
+                 generalCase t = let i        = fromIntegral $ constrIndex (toConstr t) - 1 
                                      imax     = maxConstrIndex (dataTypeOf t) 
-                                     putIndex | imax == 1    =                    return ()
-                                              | imax <= 2^8  = putWord8    (fromIntegral i) 
-                                              | imax <= 2^16 = putWord16le (fromIntegral i) 
-                                              | imax <= 2^24 = putWord8    (fromIntegral l)
-                                                            >> putWord16le (fromIntegral h)
+                                     putIndex | imax == 1    = return      ()
+                                              | imax <= 2^8  = putWord8     i 
+                                              | imax <= 2^16 = putWord16le  i 
                                               | otherwise    = error "putGeneric: constructor index out of range"
                                  in  foldl (>>) putIndex (gmapQ putGeneric t) 
   
