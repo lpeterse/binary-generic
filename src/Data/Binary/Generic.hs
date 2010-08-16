@@ -54,14 +54,16 @@ module Data.Binary.Generic (
    ) where
 
 import Data.Binary
+import Data.Binary.Put     (putWord16le, putWord32le)
+import Data.Binary.Get     (getWord16le, getWord32le)
 import Data.Binary.IEEE754 (putFloat32be, getFloat32be, putFloat64be, getFloat64be)
-import Data.ByteString.Lazy (ByteString)  
 
 import Data.Data
 import Data.Generics
 
 import Data.Word ()
 import Data.Int  
+import Data.ByteString.Lazy (ByteString)  
 import Data.Text.Lazy (Text) 
 import Data.Text.Lazy.Encoding (encodeUtf8, decodeUtf8)
 
@@ -86,13 +88,16 @@ getGeneric  = generalCase
               `extR` (getFloat64be :: Get Double)
               where
                 getText       = get >>= (return . decodeUtf8)
-                fromIntegralM = return . fromIntegral
+                fi            = fromIntegral
                 myDataType    = dataTypeOf ((undefined :: Get b -> b) generalCase)
                 generalCase   = let imax  = maxConstrIndex myDataType
-                                    index | imax == 1   = return 1 :: Get Int
-                                          | imax <= 255 = (get :: Get Word8)  >>= fromIntegralM
-                                          | otherwise   = (get :: Get Word16) >>= fromIntegralM
-                                in  index >>= \i-> fromConstrM getGeneric (indexConstr myDataType i)
+                                    index | imax == 1    = return 0     :: Get Int
+                                          | imax <= 2^8  = getWord8    >>= return . fi
+                                          | imax <= 2^16 = getWord8    >>= \l-> getWord16le 
+                                                                       >>= \h-> return $ (fi h)*256 + (fi l)
+                                          | imax <= 2^24 = getWord32le >>= return . fi
+                                          | otherwise    = error "getGeneric: constructor index out of range"
+                                in  index >>= \i-> fromConstrM getGeneric (indexConstr myDataType (i+1))
 
 putGeneric  :: (Data a) => a -> Put 
 putGeneric   = generalCase 
@@ -113,11 +118,21 @@ putGeneric   = generalCase
                `extQ` (putFloat32be     :: Float      -> Put)
                `extQ` (putFloat64be     :: Double     -> Put)
                where
-                 generalCase t = let i    = fromIntegral $ constrIndex (toConstr t)
-                                     imax = maxConstrIndex (dataTypeOf t) 
-                                     putIndex | imax == 1   =                      return ()
-                                              | imax <= 255 = put (i :: Word8)  >> return ()
-                                              | otherwise   = put (i :: Word16) >> return ()
+                 generalCase t = let i        = constrIndex (toConstr t) - 1 
+                                     (h,l)    = quotRem i (2^8)
+                                     imax     = maxConstrIndex (dataTypeOf t) 
+                                     putIndex | imax == 1    =                    return ()
+                                              | imax <= 2^8  = putWord8    (fromIntegral i) 
+                                              | imax <= 2^16 = putWord16le (fromIntegral i) 
+                                              | imax <= 2^24 = putWord8    (fromIntegral l)
+                                                            >> putWord16le (fromIntegral h)
+                                              | otherwise    = error "putGeneric: constructor index out of range"
                                  in  foldl (>>) putIndex (gmapQ putGeneric t) 
   
+
+extend :: (Typeable a, Typeable b) => (Get a, a -> Put) -> (Get b, b -> Put) -> (Get a, a -> Put)
+extend (g,p) (g',p') = (g `extR` g', p `extQ` p')
+
+extendDefault :: (Data a, Typeable b) => (Get b, b -> Put) -> (Get a, a -> Put)
+extendDefault  = extend (getGeneric, putGeneric)
 
