@@ -93,10 +93,10 @@ getGeneric  = generalCase
                 fromIntegralM = return . fromIntegral
                 myDataType    = dataTypeOf ((undefined :: Get b -> b) generalCase)
                 generalCase   = let imax  = maxConstrIndex myDataType
-                                    index | imax == 1    = return 0     :: Get Int
-                                          | imax <= 2^8  = getWord8    >>= fromIntegralM
-                                          | imax <= 2^16 = getWord16le >>= fromIntegralM 
-                                          | otherwise    = error "getGeneric: constructor index out of range"
+                                    index | imax == 1     = return 0     :: Get Int
+                                          | imax <= 256   = getWord8    >>= fromIntegralM
+                                          | imax <= 65536 = getWord16le >>= fromIntegralM 
+                                          | otherwise     = error "getGeneric: constructor index out of range"
                                 in  index >>= \i-> fromConstrM getGeneric (indexConstr myDataType (i+1))
 
 putGeneric  :: (Data a) => a -> Put 
@@ -120,10 +120,10 @@ putGeneric   = generalCase
                where
                  generalCase t = let i        = fromIntegral $ constrIndex (toConstr t) - 1 
                                      imax     = maxConstrIndex (dataTypeOf t) 
-                                     putIndex | imax == 1    = return      ()
-                                              | imax <= 2^8  = putWord8     i 
-                                              | imax <= 2^16 = putWord16le  i 
-                                              | otherwise    = error "putGeneric: constructor index out of range"
+                                     putIndex | imax == 1     = return      ()
+                                              | imax <= 256   = putWord8     i 
+                                              | imax <= 65536 = putWord16le  i 
+                                              | otherwise     = error "putGeneric: constructor index out of range"
                                  in  foldl (>>) putIndex (gmapQ putGeneric t) 
   
 
