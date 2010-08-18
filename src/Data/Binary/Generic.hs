@@ -40,23 +40,28 @@ getGeneric  = generalCase
                 myDataType    = dataTypeOf ((undefined :: Get b -> b) generalCase)
                 typeName      = showsTypeRep (typeOf $ (undefined :: Get b -> b) generalCase) ""
                 generalCase   = let imax  = maxConstrIndex myDataType
-                                    index | imax == 0     = error $ "getGeneric: `" ++ typeName ++ "' is not algebraic."
+                                    index | imax == 0     = error "getGeneric: constructor count is 0."
                                           | imax == 1     = return 0     :: Get Int
                                           | imax <= 256   = getWord8    >>= fromIntegralM
                                           | imax <= 65536 = getWord16be >>= fromIntegralM 
-                                          | otherwise     = error   "getGeneric: constructor index out of range."
-                                in  index >>= \i-> fromConstrM getGeneric (indexConstr myDataType (i+1))
+                                          | otherwise     = error "getGeneric: constructor count out of range."
+                                in  if isAlgType myDataType
+                                      then index >>= \i-> fromConstrM getDefault (indexConstr myDataType (i+1))
+                                      else error $ "getGeneric: `" ++ typeName ++ "' is not algebraic."
 
 putGeneric  :: (Data a) => a -> Put 
 putGeneric t = let i        = fromIntegral $ constrIndex (toConstr t) - 1 
                    imax     = maxConstrIndex (dataTypeOf t) 
                    typeName = showsTypeRep (typeOf t) ""
-                   putIndex | imax == 0     = error $ "putGeneric: `" ++ typeName ++ "' is not algebraic."
+                   putIndex | imax == 0     = error "putGeneric: constructor count is 0."
                             | imax == 1     = return      ()
                             | imax <= 256   = putWord8     i 
                             | imax <= 65536 = putWord16be  i 
-                            | otherwise     = error   "putGeneric: constructor index out of range."
-               in  foldl (>>) putIndex (gmapQ putGeneric t) 
+                            | otherwise     = error "putGeneric: constructor count out of range."
+               in  if isAlgType (dataTypeOf t)
+                     then foldl (>>) putIndex (gmapQ putDefault t) 
+                     else error $ "putGeneric: `" ++ typeName ++ "' is not algebraic."
+
   
 defaultExtended :: (Data a) => (Get a, a -> Put)
 defaultExtended  = defaultExtension (getGeneric, putGeneric)
