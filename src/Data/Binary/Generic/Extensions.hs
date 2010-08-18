@@ -70,27 +70,35 @@ import Data.Generics
 
 import Data.Word ()
 import Data.Int  
+import Data.List
+import Data.Bits
 import Data.ByteString.Lazy (ByteString)  
 import Data.Text.Lazy (Text) 
 import Data.Text.Lazy.Encoding (encodeUtf8, decodeUtf8)
 
+import Control.Monad
+
 type Extension a = (Get a, a -> Put) -> (Get a, a -> Put)
 
-extGet = extR
-extPut = extQ
+
+extGet :: (Monad m, Typeable a, Typeable b) => m a -> m b -> m a
+extGet  = extR
+
+extPut :: (Typeable a, Typeable b) => (a -> q) -> (b -> q) -> a -> q
+extPut  = extQ
 
 defaultExtension :: (Typeable a) => Extension a
 defaultExtension  =   byteStringExt 
                     . textExt 
                     . floatExt 
-                    . wordExt 
                     . integerExt
+                    . wordExt 
                     . intExt 
                     . charExt
 
 integerExt      :: (Typeable a) => Extension a
-integerExt (g,p) = let g' = g `extGet` (get          :: Get Integer      )
-                       p' = p `extPut` (put          :: Integer    -> Put)
+integerExt (g,p) = let g' = g `extGet` (getInteger :: Get Integer     )
+                       p' = p `extPut` (putInteger :: Integer   -> Put)
                    in (g',p')
 
 charExt      :: (Typeable a) => Extension a
@@ -142,4 +150,50 @@ floatExt (g,p) = let g' = g `extGet` (getFloat32be :: Get Float       )
                      p' = p `extPut` (putFloat32be :: Float     -> Put)
                             `extPut` (putFloat64be :: Double    -> Put)
                  in (g',p')
+
+
+-----------------------------------------------------------------------
+-- fixing inconsistent byteorder of Integer to big-endian
+-----------------------------------------------------------------------
+
+
+{-# INLINE putInteger #-}
+putInteger  :: Integer -> Put 
+putInteger n | n >= lo && n <= hi = do
+        putWord8 0
+        put (fromIntegral n :: Int32)  -- fast path
+     where
+        lo = fromIntegral (minBound :: Int32) :: Integer
+        hi = fromIntegral (maxBound :: Int32) :: Integer
+putInteger n = do
+        putWord8 1
+        put sign
+        put $ reverse (unroll (abs n))         -- unroll the bytes
+     where
+        sign = fromIntegral (signum n) :: Word8
+
+{-# INLINE getInteger #-}
+getInteger  :: Get Integer
+getInteger   = do
+        tag <- get :: Get Word8
+        case tag of
+            0 -> liftM fromIntegral (get :: Get Int32)
+            _ -> do sign  <- get
+                    bytes <- get
+                    let v = roll (reverse bytes)
+                    return $! if sign == (1 :: Word8) then v else - v
+
+--
+-- Fold and unfold an Integer to and from a list of its bytes
+--
+unroll :: Integer -> [Word8]
+unroll = unfoldr step
+  where
+    step 0 = Nothing
+    step i = Just (fromIntegral i, i `shiftR` 8)
+
+roll :: [Word8] -> Integer
+roll   = foldr unstep 0
+  where
+    unstep b a = a `shiftL` 8 .|. fromIntegral b
 

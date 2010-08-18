@@ -26,13 +26,11 @@ module Data.Binary.Generic (
    ) where
 
 import Data.Binary
-import Data.Binary.Put     (putWord16le)
-import Data.Binary.Get     (getWord16le)
+import Data.Binary.Put     (putWord16be)
+import Data.Binary.Get     (getWord16be)
 import Data.Binary.Generic.Extensions
 
 import Data.Data
-
-import Data.Word ()
 
 
 getGeneric :: (Data a) => Get a
@@ -45,7 +43,7 @@ getGeneric  = generalCase
                                     index | imax == 0     = error $ "getGeneric: `" ++ typeName ++ "' is not algebraic."
                                           | imax == 1     = return 0     :: Get Int
                                           | imax <= 256   = getWord8    >>= fromIntegralM
-                                          | imax <= 65536 = getWord16le >>= fromIntegralM 
+                                          | imax <= 65536 = getWord16be >>= fromIntegralM 
                                           | otherwise     = error   "getGeneric: constructor index out of range."
                                 in  index >>= \i-> fromConstrM getGeneric (indexConstr myDataType (i+1))
 
@@ -56,7 +54,7 @@ putGeneric t = let i        = fromIntegral $ constrIndex (toConstr t) - 1
                    putIndex | imax == 0     = error $ "putGeneric: `" ++ typeName ++ "' is not algebraic."
                             | imax == 1     = return      ()
                             | imax <= 256   = putWord8     i 
-                            | imax <= 65536 = putWord16le  i 
+                            | imax <= 65536 = putWord16be  i 
                             | otherwise     = error   "putGeneric: constructor index out of range."
                in  foldl (>>) putIndex (gmapQ putGeneric t) 
   
