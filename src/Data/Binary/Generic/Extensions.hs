@@ -84,8 +84,14 @@ defaultExtension  =   byteStringExt
                     . textExt 
                     . floatExt 
                     . wordExt 
+                    . integerExt
                     . intExt 
                     . charExt
+
+integerExt      :: (Typeable a) => Extension a
+integerExt (g,p) = let g' = g `extGet` (get          :: Get Integer      )
+                       p' = p `extPut` (put          :: Integer    -> Put)
+                   in (g',p')
 
 charExt      :: (Typeable a) => Extension a
 charExt (g,p) = let g' = g `extGet` (get          :: Get Char         )
