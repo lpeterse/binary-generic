@@ -25,6 +25,7 @@ library
                    syb,
                    text
   hs-source-dirs:  src
-  exposed-modules: Data.Binary.Generic
+  exposed-modules: Data.Binary.Generic,
+                   Data.Binary.Generic.Extensions
   ghc-options:     -Wall
 
