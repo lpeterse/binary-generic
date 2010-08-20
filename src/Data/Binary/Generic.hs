@@ -1,4 +1,5 @@
-{-# OPTIONS -XNoMonomorphismRestriction #-}
+{-# OPTIONS -XNoMonomorphismRestriction -XRankNTypes  #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -16,12 +17,15 @@
 -----------------------------------------------------------------------------
 
 module Data.Binary.Generic (
-    
-     getGeneric
+
+     getAlgebraic
+   , putAlgebraic
+
+   , getGeneric
    , putGeneric
 
-   , getDefault
-   , putDefault
+   , getGenericByCallback
+   , putGenericByCallback
 
    ) where
 
@@ -33,41 +37,57 @@ import Data.Binary.Generic.Extensions
 import Data.Data
 
 
-getGeneric :: (Data a) => Get a
-getGeneric  = generalCase 
+getAlgebraic :: (Data a) => Get a
+getAlgebraic  = getGenericByCallback getAlgebraic
+
+putAlgebraic :: (Data a) => a -> Put
+putAlgebraic  = putGenericByCallback putAlgebraic
+
+
+getGeneric   :: (Data a) => Get a
+getGeneric    = fst defaultStack
+
+putGeneric   :: (Data a) => a -> Put
+putGeneric    = snd defaultStack
+
+
+defaultStack :: forall a. Data a => (Get a, a -> Put)
+defaultStack  = defaultExtension base
               where
-                fromIntegralM = return . fromIntegral
-                myDataType    = dataTypeOf ((undefined :: Get b -> b) generalCase)
-                typeName      = showsTypeRep (typeOf $ (undefined :: Get b -> b) generalCase) ""
-                generalCase   = let imax  = maxConstrIndex myDataType
-                                    index | imax == 0     = error "getGeneric: constructor count is 0."
-                                          | imax == 1     = return 0     :: Get Int
-                                          | imax <= 256   = getWord8    >>= fromIntegralM
-                                          | imax <= 65536 = getWord16be >>= fromIntegralM 
-                                          | otherwise     = error "getGeneric: constructor count out of range."
-                                in  if isAlgType myDataType
-                                      then index >>= \i-> fromConstrM getDefault (indexConstr myDataType (i+1))
-                                      else error $ "getGeneric: `" ++ typeName ++ "' is not algebraic."
+                g = fst defaultStack
+                p = snd defaultStack
+                base :: (Get a, a -> Put)
+                base  = (getGenericByCallback g, putGenericByCallback p)
 
-putGeneric  :: (Data a) => a -> Put 
-putGeneric t = let i        = fromIntegral $ constrIndex (toConstr t) - 1 
-                   imax     = maxConstrIndex (dataTypeOf t) 
-                   typeName = showsTypeRep (typeOf t) ""
-                   putIndex | imax == 0     = error "putGeneric: constructor count is 0."
-                            | imax == 1     = return      ()
-                            | imax <= 256   = putWord8     i 
-                            | imax <= 65536 = putWord16be  i 
-                            | otherwise     = error "putGeneric: constructor count out of range."
-               in  if isAlgType (dataTypeOf t)
-                     then foldl (>>) putIndex (gmapQ putDefault t) 
-                     else error $ "putGeneric: `" ++ typeName ++ "' is not algebraic."
+--------------------------------------------------------------
+-- algebraic basecases with callbacks
+--------------------------------------------------------------
 
-  
-defaultExtended :: (Data a) => (Get a, a -> Put)
-defaultExtended  = defaultExtension (getGeneric, putGeneric)
+getGenericByCallback  :: (Data a) => (forall d. Data d => Get d) -> Get a
+getGenericByCallback c = generalCase 
+       where
+         myDataType    = dataTypeOf ((undefined :: Get b -> b) generalCase)
+         typeName      = showsTypeRep (typeOf $ (undefined :: Get b -> b) generalCase) ""
+         generalCase   = let imax  = maxConstrIndex myDataType
+                             index | imax == 0     = error "getGeneric: constructor count is 0."
+                                   | imax == 1     = return 0     :: Get Int
+                                   | imax <= 256   = getWord8    >>= (return . fromIntegral)
+                                   | imax <= 65536 = getWord16be >>= (return . fromIntegral)
+                                   | otherwise     = error "getGeneric: constructor count out of range."
+                         in  if isAlgType myDataType
+                               then index >>= \i-> fromConstrM c (indexConstr myDataType (i+1))
+                               else error $ "getGeneric: `" ++ typeName ++ "' is not algebraic."
 
-getDefault :: (Data a) => Get a
-getDefault  = fst defaultExtended
+putGenericByCallback    :: (Data a) => (forall d. Data d => d -> Put) -> a -> Put 
+putGenericByCallback c t = let i        = fromIntegral $ constrIndex (toConstr t) - 1 
+                               imax     = maxConstrIndex (dataTypeOf t) 
+                               typeName = showsTypeRep (typeOf t) ""
+                               putIndex | imax == 0     = error "putGeneric: constructor count is 0."
+                                        | imax == 1     = return      ()
+                                        | imax <= 256   = putWord8     i 
+                                        | imax <= 65536 = putWord16be  i 
+                                        | otherwise     = error "putGeneric: constructor count out of range."
+                               in  if isAlgType (dataTypeOf t)
+                                     then foldl (>>) putIndex (gmapQ c t) 
+                                     else error $ "putGeneric: `" ++ typeName ++ "' is not algebraic."
 
-putDefault :: (Data a) => a -> Put
-putDefault  = snd defaultExtended

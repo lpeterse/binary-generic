@@ -48,7 +48,9 @@
 
 module Data.Binary.Generic.Extensions (
     
-     extGet
+     Extension
+
+   , extGet
    , extPut
 
    , defaultExtension
