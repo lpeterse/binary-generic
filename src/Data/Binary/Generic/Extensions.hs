@@ -74,9 +74,12 @@ import Data.Word ()
 import Data.Int  
 import Data.List
 import Data.Bits
-import Data.ByteString.Lazy (ByteString)  
-import Data.Text.Lazy (Text) 
-import Data.Text.Lazy.Encoding (encodeUtf8, decodeUtf8)
+import Data.ByteString.Lazy              (ByteString)  
+
+import qualified Data.Text               as T 
+import qualified Data.Text.Encoding      as TE
+import qualified Data.Text.Lazy          as LT 
+import qualified Data.Text.Lazy.Encoding as LTE
 
 import Control.Monad
 
@@ -140,10 +143,14 @@ byteStringExt (g,p) = let g' = g `extGet` (get    :: Get ByteString   )
                       in (g',p')
 
 textExt       :: (Typeable a) => Extension a
-textExt  (g,p) = let getText = get >>= (return . decodeUtf8)
-                     putText = put             . encodeUtf8
-                     g'      = g `extGet` (getText :: Get Text        )
-                     p'      = p `extPut` (putText :: Text      -> Put)
+textExt  (g,p) = let getText  = get >>= (return . TE.decodeUtf8)
+                     putText  = put             . TE.encodeUtf8
+                     getTextL = get >>= (return . LTE.decodeUtf8)
+                     putTextL = put             . LTE.encodeUtf8
+                     g'      = g `extGet` (getText  :: Get T.Text     )
+                                 `extGet` (getTextL :: Get LT.Text    )
+                     p'      = p `extPut` (putText  :: T.Text   -> Put)
+                                 `extPut` (putTextL :: LT.Text  -> Put)
                  in (g',p')
 
 floatExt      :: (Typeable a) => Extension a
