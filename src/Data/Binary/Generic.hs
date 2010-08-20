@@ -1,5 +1,4 @@
-{-# OPTIONS -XNoMonomorphismRestriction -XRankNTypes  #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS -XNoMonomorphismRestriction -XRankNTypes #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -11,8 +10,23 @@
 -- Stability   : experimental
 --
 -- 
--- For any algebraic datatype just make it an instance of class @Data.Data@
--- by simply deriving 'Data' on definition or try stand-alone-deriving.
+-- For any algebraic datatype just make it an instance of class @Data.Data.Data@
+-- by simply deriving 'Data' on definition or try stand-alone-deriving. This
+-- allows the library to enumerate the value constructors and thereby
+-- encoding their index. Notice that serialisation depends on a type's
+-- structure. Serialisations might get unreadable if the type is altered.
+-- 
+-- 'getGeneric' and 'putGeneric' implement a selection of type-specific 
+-- defaults and are grounded by a canonical serialisation for all algebraic
+-- types that instantiate 'Data.Data.Data'.
+-- Have a look at @Data.Binary.Generic.Extensions@ for details.
+-- 
+-- If you want to ground your own type-specific stack @myStack@ of extensions
+-- write the following for the @Get@-part (the @Put@-part follows
+-- analogously):
+-- 
+-- > getMyStack :: Data a => Get a
+-- > getMyStack  = myStack (getGenericByCallback getMyStack)
 --
 -----------------------------------------------------------------------------
 
@@ -29,41 +43,32 @@ module Data.Binary.Generic (
 
    ) where
 
+import Data.Data
 import Data.Binary
-import Data.Binary.Put     (putWord16be)
-import Data.Binary.Get     (getWord16be)
+import Data.Binary.Put  (putWord16be)
+import Data.Binary.Get  (getWord16be)
 import Data.Binary.Generic.Extensions
 
-import Data.Data
 
-
-getAlgebraic :: (Data a) => Get a
+getAlgebraic :: Data a => Get a
 getAlgebraic  = getGenericByCallback getAlgebraic
 
-putAlgebraic :: (Data a) => a -> Put
+putAlgebraic :: Data a => a -> Put
 putAlgebraic  = putGenericByCallback putAlgebraic
 
 
-getGeneric   :: (Data a) => Get a
-getGeneric    = fst defaultStack
+getGeneric   :: Data a => Get a
+getGeneric    = getExtDefault (getGenericByCallback getGeneric)
 
-putGeneric   :: (Data a) => a -> Put
-putGeneric    = snd defaultStack
+putGeneric   :: Data a => a -> Put
+putGeneric    = putExtDefault (putGenericByCallback putGeneric)
 
-
-defaultStack :: forall a. Data a => (Get a, a -> Put)
-defaultStack  = defaultExtension base
-              where
-                g = fst defaultStack
-                p = snd defaultStack
-                base :: (Get a, a -> Put)
-                base  = (getGenericByCallback g, putGenericByCallback p)
 
 --------------------------------------------------------------
 -- algebraic basecases with callbacks
 --------------------------------------------------------------
 
-getGenericByCallback  :: (Data a) => (forall d. Data d => Get d) -> Get a
+getGenericByCallback  :: Data a => (forall d. Data d => Get d) -> Get a
 getGenericByCallback c = generalCase 
        where
          myDataType    = dataTypeOf ((undefined :: Get b -> b) generalCase)
@@ -78,7 +83,7 @@ getGenericByCallback c = generalCase
                                then index >>= \i-> fromConstrM c (indexConstr myDataType (i+1))
                                else error $ "getGeneric: `" ++ typeName ++ "' is not algebraic."
 
-putGenericByCallback    :: (Data a) => (forall d. Data d => d -> Put) -> a -> Put 
+putGenericByCallback    :: Data a => (forall d. Data d => d -> Put) -> a -> Put 
 putGenericByCallback c t = let i        = fromIntegral $ constrIndex (toConstr t) - 1 
                                imax     = maxConstrIndex (dataTypeOf t) 
                                typeName = showsTypeRep (typeOf t) ""

@@ -9,58 +9,63 @@
 -- Maintainer  : Lars Petersen <info@lars-petersen.net>
 -- Stability   : experimental
 --
--- The following primitive datatypes are used as basecases and get serialized
--- according to their instances of @Data.Binary@:
+-- You can build your own type-specific stacks. For example the default stack
+-- looks like this, whereas the ordering determines, which function matches
+-- first for a specific type. This especially allows you to override the
+-- default choices:
+--
+-- > getExtDefault    :: Typeable a => Get a -> Get a
+-- > getExtDefault     = getExtInteger
+-- >                   . getExtChar
+-- >                   . getExtWord
+-- >                   . getExtInt
+-- >                   . getExtFloat
+-- >                   . getExtText
+-- >                   . getExtByteString
+-- >
+-- > putExtDefault    :: Typeable a => (a -> Put) -> a -> Put
+-- > putExtDefault     = putExtInteger
+-- >                   . putExtChar
+-- >                   . putExtWord
+-- >                   . putExtInt
+-- >                   . putExtFloat
+-- >                   . putExtText
+-- >                   . putExtByteString
 -- 
--- - 'Char'
+-- Notice that these stacks have to be grounded, ideally with something
+-- that handles algebraic types.
+-- Have a look at @Data.Binary.Generic@ how this is done for the default 
+-- stack.
 -- 
--- - 'Int'
+-- IMPORTANT: You cannot simply apply an extension to 'getGeneric' or
+-- 'putGeneric', since these do a recursive call at the bottom level
+-- which points to the top of the stack.
 -- 
--- - 'Word'
--- 
--- - 'Integer'
--- 
--- - 'Int8'
--- 
--- - 'Int16'
--- 
--- - 'Int32'
--- 
--- - 'Int64'
--- 
--- - 'Word8'
--- 
--- - 'Word16'
--- 
--- - 'Word32'
--- 
--- - 'Word64'
--- 
--- - 'Data.ByteString.Lazy.ByteString'
--- 
--- - 'Data.Text.Lazy.Text' encoded as Utf8
--- 
--- 'Float' and 'Double' are serialized according to 'IEEE754'.
--- For any algebraic datatype just make it an instance of class @Data.Data@
--- by simply deriving 'Data' on definition or try stand-alone-deriving.
 --
 -----------------------------------------------------------------------------
 
 module Data.Binary.Generic.Extensions (
     
-     Extension
-
-   , extGet
+     extGet
    , extPut
 
-   , defaultExtension
+   , getExtDefault
+   , putExtDefault
 
-   , charExt
-   , intExt
-   , wordExt
-   , floatExt
-   , byteStringExt
-   , textExt
+   , getExtInteger
+   , putExtInteger
+   , getExtChar
+   , putExtChar
+   , getExtWord
+   , putExtWord
+   , getExtInt
+   , putExtInt
+   , getExtFloat
+   , putExtFloat
+   , getExtText
+   , putExtText
+   , getExtByteString
+   , putExtByteString
 
    ) where
 
@@ -83,87 +88,123 @@ import qualified Data.Text.Lazy.Encoding as LTE
 
 import Control.Monad
 
-type Extension a = (Get a, a -> Put) -> (Get a, a -> Put)
+
+extGet           :: (Monad m, Typeable a, Typeable b) => m b -> m a -> m a
+extGet            = flip extR
+
+extPut           :: (Typeable a, Typeable b) => (b -> q) -> (a -> q) -> a -> q
+extPut            = flip extQ
 
 
-extGet :: (Monad m, Typeable a, Typeable b) => m a -> m b -> m a
-extGet  = extR
+getExtDefault    :: Typeable a => Get a -> Get a
+getExtDefault     = getExtInteger
+                  . getExtChar
+                  . getExtWord
+                  . getExtInt
+                  . getExtFloat
+                  . getExtText
+                  . getExtByteString
 
-extPut :: (Typeable a, Typeable b) => (a -> q) -> (b -> q) -> a -> q
-extPut  = extQ
-
-defaultExtension :: (Typeable a) => Extension a
-defaultExtension  =   byteStringExt 
-                    . textExt 
-                    . floatExt 
-                    . integerExt
-                    . wordExt 
-                    . intExt 
-                    . charExt
-
-integerExt      :: (Typeable a) => Extension a
-integerExt (g,p) = let g' = g `extGet` (getInteger :: Get Integer     )
-                       p' = p `extPut` (putInteger :: Integer   -> Put)
-                   in (g',p')
-
-charExt      :: (Typeable a) => Extension a
-charExt (g,p) = let g' = g `extGet` (get          :: Get Char         )
-                    p' = p `extPut` (put          :: Char       -> Put)
-                in (g',p')
-
-wordExt      :: (Typeable a) => Extension a
-wordExt (g,p) = let g' = g `extGet` (get          :: Get Word         ) 
-                           `extGet` (get          :: Get Word8        )
-                           `extGet` (get          :: Get Word16       )
-                           `extGet` (get          :: Get Word32       )
-                           `extGet` (get          :: Get Word64       )
-                    p' = p `extPut` (put          :: Word       -> Put)
-                           `extPut` (put          :: Word8      -> Put)
-                           `extPut` (put          :: Word16     -> Put)
-                           `extPut` (put          :: Word32     -> Put)
-                           `extPut` (put          :: Word64     -> Put)
-                in (g',p')
-
-intExt       :: (Typeable a) => Extension a
-intExt  (g,p) = let g' = g `extGet` (get          :: Get Int          )  
-                           `extGet` (get          :: Get Int8         )
-                           `extGet` (get          :: Get Int16        )
-                           `extGet` (get          :: Get Int32        )
-                           `extGet` (get          :: Get Int64        )
-                    p' = p `extPut` (put          :: Int        -> Put)
-                           `extPut` (put          :: Int8       -> Put)
-                           `extPut` (put          :: Int16      -> Put)
-                           `extPut` (put          :: Int32      -> Put)
-                           `extPut` (put          :: Int64      -> Put)
-                in (g',p')
-
-byteStringExt :: (Typeable a) => Extension a
-byteStringExt (g,p) = let g' = g `extGet` (get    :: Get ByteString   )
-                          p' = p `extPut` (put    :: ByteString -> Put)
-                      in (g',p')
-
-textExt       :: (Typeable a) => Extension a
-textExt  (g,p) = let getText  = get >>= (return . TE.decodeUtf8)
-                     putText  = put             . TE.encodeUtf8
-                     getTextL = get >>= (return . LTE.decodeUtf8)
-                     putTextL = put             . LTE.encodeUtf8
-                     g'      = g `extGet` (getText  :: Get T.Text     )
-                                 `extGet` (getTextL :: Get LT.Text    )
-                     p'      = p `extPut` (putText  :: T.Text   -> Put)
-                                 `extPut` (putTextL :: LT.Text  -> Put)
-                 in (g',p')
-
-floatExt      :: (Typeable a) => Extension a
-floatExt (g,p) = let g' = g `extGet` (getFloat32be :: Get Float       )  
-                            `extGet` (getFloat64be :: Get Double      )
-                     p' = p `extPut` (putFloat32be :: Float     -> Put)
-                            `extPut` (putFloat64be :: Double    -> Put)
-                 in (g',p')
+putExtDefault    :: Typeable a => (a -> Put) -> a -> Put
+putExtDefault     = putExtInteger
+                  . putExtChar
+                  . putExtWord
+                  . putExtInt
+                  . putExtFloat
+                  . putExtText
+                  . putExtByteString
 
 
------------------------------------------------------------------------
--- fixing inconsistent byteorder of Integer to big-endian
------------------------------------------------------------------------
+getExtInteger    :: Typeable a => Get a -> Get a
+getExtInteger     = extGet         (getInteger :: Get        Integer) 
+
+putExtInteger    :: Typeable a => (a -> Put) -> a -> Put 
+putExtInteger     = extPut         (putInteger :: Integer     -> Put)
+
+
+getExtChar       :: Typeable a => Get a -> Get a
+getExtChar        = extGet         (get        :: Get           Char) 
+
+putExtChar       :: Typeable a => (a -> Put) -> a -> Put 
+putExtChar        = extPut         (put        :: Char        -> Put)
+
+
+getExtWord       :: Typeable a => Get a -> Get a
+getExtWord        =  extGet        (get        :: Get         Word  )
+                  .  extGet        (get        :: Get         Word8 ) 
+                  .  extGet        (get        :: Get         Word16) 
+                  .  extGet        (get        :: Get         Word32) 
+                  .  extGet        (get        :: Get         Word64) 
+
+putExtWord       :: Typeable a => (a -> Put) -> a -> Put 
+putExtWord        =  extPut        (put        :: Word        -> Put) 
+                  .  extPut        (put        :: Word8       -> Put) 
+                  .  extPut        (put        :: Word16      -> Put) 
+                  .  extPut        (put        :: Word32      -> Put) 
+                  .  extPut        (put        :: Word64      -> Put)  
+ 
+
+getExtInt        :: Typeable a => Get a -> Get a
+getExtInt         =  extGet        (get        :: Get         Int  )
+                  .  extGet        (get        :: Get         Int8 ) 
+                  .  extGet        (get        :: Get         Int16) 
+                  .  extGet        (get        :: Get         Int32) 
+                  .  extGet        (get        :: Get         Int64) 
+
+putExtInt        :: Typeable a => (a -> Put) -> a -> Put 
+putExtInt         =  extPut        (put        :: Int         -> Put) 
+                  .  extPut        (put        :: Int8        -> Put) 
+                  .  extPut        (put        :: Int16       -> Put) 
+                  .  extPut        (put        :: Int32       -> Put) 
+                  .  extPut        (put        :: Int64       -> Put)  
+
+
+getExtFloat      :: Typeable a => Get a -> Get a
+getExtFloat       = extGet       (getFloat32be :: Get         Float)
+                  . extGet       (getFloat64be :: Get        Double)
+
+putExtFloat      :: Typeable a => (a -> Put) -> a -> Put 
+putExtFloat       = extPut       (putFloat32be :: Float      -> Put)
+                  . extPut       (putFloat64be :: Double     -> Put)
+
+
+getExtText       :: Typeable a => Get a -> Get a
+getExtText        = extGet         (getText    :: Get         T.Text) 
+                  . extGet         (getTextL   :: Get        LT.Text)
+
+putExtText       :: Typeable a => (a -> Put) -> a -> Put 
+putExtText        = extPut         (putText    :: T.Text      -> Put)
+                  . extPut         (putTextL   :: LT.Text     -> Put)
+
+
+getExtByteString :: Typeable a => Get a -> Get a
+getExtByteString  = extGet         (get        :: Get     ByteString) 
+
+putExtByteString :: Typeable a => (a -> Put) -> a -> Put 
+putExtByteString  = extPut         (put        :: ByteString  -> Put)
+
+
+
+-------------------------------------------------------------------
+-- serialisation for Data.Text
+-------------------------------------------------------------------
+
+getText  :: Get  T.Text
+getText   = get >>= (return .  TE.decodeUtf8)
+
+getTextL :: Get LT.Text
+getTextL  = get >>= (return . LTE.decodeUtf8)
+
+putText  :: T.Text  -> Put
+putText   = put .  TE.encodeUtf8
+
+putTextL :: LT.Text -> Put
+putTextL  = put . LTE.encodeUtf8
+
+
+-------------------------------------------------------------------
+-- integer serialisation with consistent big-endian byteorder
+-------------------------------------------------------------------
 
 
 {-# INLINE putInteger #-}
