@@ -1,4 +1,4 @@
-{-# OPTIONS -XNoMonomorphismRestriction -XRankNTypes #-}
+{-# LANGUAGE NoMonomorphismRestriction, RankNTypes, ScopedTypeVariables #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -68,11 +68,11 @@ putGeneric    = putExtDefault (putGenericByCallback putGeneric)
 -- algebraic basecases with callbacks
 --------------------------------------------------------------
 
-getGenericByCallback  :: Data a => (forall d. Data d => Get d) -> Get a
+getGenericByCallback  :: forall a. Data a => (forall d. Data d => Get d) -> Get a
 getGenericByCallback c = generalCase 
        where
-         myDataType    = dataTypeOf ((undefined :: Get b -> b) generalCase)
-         typeName      = showsTypeRep (typeOf $ (undefined :: Get b -> b) generalCase) ""
+         myDataType    = dataTypeOf (undefined :: a)
+         typeName      = showsTypeRep (typeOf (undefined :: a)) ""
          generalCase   = let imax  = maxConstrIndex myDataType
                              index | imax == 0     = error "getGeneric: constructor count is 0."
                                    | imax == 1     = return 0     :: Get Int
