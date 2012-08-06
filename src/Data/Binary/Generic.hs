@@ -1,4 +1,4 @@
-{-# OPTIONS -XNoMonomorphismRestriction -XRankNTypes #-}
+{-# OPTIONS -XRankNTypes #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -84,7 +84,8 @@ getGenericByCallback c = generalCase
                                else error $ "getGeneric: `" ++ typeName ++ "' is not algebraic."
 
 putGenericByCallback    :: Data a => (forall d. Data d => d -> Put) -> a -> Put 
-putGenericByCallback c t = let i        = fromIntegral $ constrIndex (toConstr t) - 1 
+putGenericByCallback c t = let i :: Num b => b
+                               i        = fromIntegral $ constrIndex (toConstr t) - 1
                                imax     = maxConstrIndex (dataTypeOf t) 
                                typeName = showsTypeRep (typeOf t) ""
                                putIndex | imax == 0     = error "putGeneric: constructor count is 0."
