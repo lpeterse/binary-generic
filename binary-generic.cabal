@@ -1,5 +1,5 @@
 name:            binary-generic
-version:         0.2
+version:         0.2.1
 license:         BSD3
 license-file:    LICENSE
 author:          Lars Petersen <info@lars-petersen.net>
@@ -16,7 +16,7 @@ category:        Data, Parsing
 stability:       experimental
 build-type:      Simple
 cabal-version:   >= 1.2
-tested-with:     GHC == 6.12.1
+tested-with:     GHC == 7.0.3
 extra-source-files: README 
 
 library

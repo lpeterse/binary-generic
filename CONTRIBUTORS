@@ -1,0 +1,3 @@
+August 6th, 2012
+
+Thanks to Edsko de Vries for noticing incompatibility with newer GHC version and supplying an adequate patch.
